@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge TTS - Генератор аудіо</title>
+    <link rel="stylesheet" href="style.css?v=1754590667317">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+</head>
+<body>
+    <div class="container">
+        <h1>Генератор аудіо з тексту</h1>
+        
+        <div class="main-content">
+            <div class="text-section">
+                <label for="text-input">Ваш текст:</label>
+                <textarea id="text-input" placeholder="Введіть текст для озвучування..."></textarea>
+                <div class="char-counter">
+                    <span id="char-count">0</span> символів
+                </div>
+            </div>
+            
+            <div class="controls-section">
+                <div class="control-group">
+                    <label for="voices">Оберіть голос:</label>
+                    <select id="voices">
+                        <option value="uk-UA, OstapNeural">Українська - Остап</option>
+                        <option value="uk-UA, PolinaNeural">Українська - Поліна</option>
+                        <option value="ru-RU, DmitryNeural">Російська - Дмитрий</option>
+                        <option value="ru-RU, SvetlanaNeural">Російська - Светлана</option>
+                        <option value="en-US, JennyNeural">Англійська - Jenny</option>
+                        <option value="en-US, GuyNeural">Англійська - Guy</option>
+                        <option value="de-DE, KatjaNeural">Німецька - Katja</option>
+                        <option value="fr-FR, DeniseNeural">Французька - Denise</option>
+                        <option value="es-ES, ElviraNeural">Іспанська - Elvira</option>
+                        <option value="it-IT, ElsaNeural">Італійська - Elsa</option>
+                        <option value="pl-PL, ZofiaNeural">Польська - Zofia</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="rate">Швидкість: <span id="rate-display">+0%</span></label>
+                    <input type="range" id="rate" min="-50" max="100" value="0" step="5">
+                </div>
+                
+                <div class="control-group">
+                    <label for="pitch">Тональність: <span id="pitch-display">+0Hz</span></label>
+                    <input type="range" id="pitch" min="-50" max="50" value="0" step="1">
+                </div>
+                
+                <button id="generate-btn" class="generate-button">Згенерувати аудіо</button>
+                
+                <div id="status" class="status"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="text-processor.js?v=1754590505332"></script>
+    <script src="edge-tts.js?v=1754590667317"></script>
+    <script src="main.js?v=1754590667317"></script>
+</body>
+</html>
