@@ -1,6 +1,7 @@
 // Отримання елементів DOM
 const textInput = document.getElementById('text-input');
 const voicesSelect = document.getElementById('voices');
+const filterEnglishCheckbox = document.getElementById('filter-english');
 const rateSlider = document.getElementById('rate');
 const pitchSlider = document.getElementById('pitch');
 const rateDisplay = document.getElementById('rate-display');
@@ -178,7 +179,8 @@ function saveSettings() {
         voice: voicesSelect.value,
         rate: rateSlider.value,
         pitch: pitchSlider.value,
-        text: textInput.value
+        text: textInput.value,
+        filterEnglish: !!(filterEnglishCheckbox && filterEnglishCheckbox.checked)
     };
     localStorage.setItem('edgeTTSSettings', JSON.stringify(settings));
     console.log('💾 Налаштування збережено:', {
@@ -206,6 +208,10 @@ function loadSettings() {
                 pitchDisplay.textContent = formatSliderValue(settings.pitch, 'Hz');
             }
             if (settings.text) textInput.value = settings.text;
+
+            if (filterEnglishCheckbox && typeof settings.filterEnglish === 'boolean') {
+                filterEnglishCheckbox.checked = settings.filterEnglish;
+            }
         }
     } catch (error) {
         console.error('Помилка завантаження налаштувань:', error);
@@ -218,8 +224,62 @@ rateSlider.addEventListener('change', saveSettings);
 pitchSlider.addEventListener('change', saveSettings);
 textInput.addEventListener('input', debounce(saveSettings, 1000));
 
+// --- Сортування списку голосів за абеткою ---
+function sortVoicesOptions() {
+    const currentValue = voicesSelect.value;
+    const options = Array.from(voicesSelect.options);
+    options.sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' }));
+    voicesSelect.innerHTML = '';
+    for (const opt of options) voicesSelect.appendChild(opt);
+    // Відновити попередній вибір, якщо є
+    const hasPrev = options.some(o => o.value === currentValue);
+    if (hasPrev) voicesSelect.value = currentValue;
+}
+
+// --- Фільтр лише English ---
+function applyEnglishFilter(checked) {
+    const desiredPrefix = 'en-';
+    const previouslySelected = voicesSelect.value;
+
+    for (const option of Array.from(voicesSelect.options)) {
+        const isEnglish = option.value.trim().startsWith(desiredPrefix);
+        option.hidden = checked ? !isEnglish : false;
+    }
+
+    // Якщо поточно обраний голос приховано — обрати перший доступний
+    if (checked) {
+        const firstVisible = Array.from(voicesSelect.options).find(o => !o.hidden);
+        if (firstVisible) {
+            voicesSelect.value = firstVisible.value;
+        }
+    } else {
+        // Повернути попередній вибір, якщо існує
+        const hasPrev = Array.from(voicesSelect.options).some(o => o.value === previouslySelected);
+        if (hasPrev) voicesSelect.value = previouslySelected;
+    }
+
+    saveSettings();
+}
+
+if (filterEnglishCheckbox) {
+    // Застосувати фільтр після завантаження налаштувань
+    document.addEventListener('DOMContentLoaded', () => {
+        // Спочатку відсортувати список
+        sortVoicesOptions();
+        // Автоматично активувати фільтр English при старті
+        filterEnglishCheckbox.checked = true;
+        applyEnglishFilter(true);
+    });
+
+    filterEnglishCheckbox.addEventListener('change', (e) => {
+        applyEnglishFilter(e.target.checked);
+    });
+}
+
 // Оновлення лічильника символів при введенні тексту
 textInput.addEventListener('input', updateCharCount);
+
+
 
 // Функція затримки для оптимізації збереження тексту
 function debounce(func, wait) {
@@ -300,6 +360,8 @@ async function combineAudioBlobs(audioBlobs) {
     
     return new Blob([combinedBuffer], { type: 'audio/mpeg' });
 }
+
+
 
 // Ініціалізація при завантаженні сторінки
 document.addEventListener('DOMContentLoaded', () => {
