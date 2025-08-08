@@ -12,6 +12,9 @@ const clearTextBtn = document.getElementById('clear-text');
 const saveSettingsBtn = document.getElementById('save-settings');
 const clearSettingsBtn = document.getElementById('clear-settings');
 const etaDiv = document.getElementById('eta');
+const chunkProgress = document.getElementById('chunk-progress');
+const chunkProgressBar = document.getElementById('chunk-progress-bar');
+const chunkProgressLabel = document.getElementById('chunk-progress-label');
 const statusDiv = document.getElementById('status');
 const charCount = document.getElementById('char-count');
 // Блокування автозбереження після очищення налаштувань
@@ -19,7 +22,8 @@ let skipSaveSettings = false;
 
 // Створення екземплярів
 const tts = new EdgeTTS();
-const textProcessor = new TextProcessor(2000, 800);
+// Збільшені частини для швидшої генерації при збереженні надійності
+const textProcessor = new TextProcessor(2600, 1000);
 
 // Функція оновлення статусу
 function updateStatus(message, type = '') {
@@ -38,6 +42,14 @@ function estimateEta(charCount, partsCount = 1) {
     const minutes = Math.floor(seconds / 60);
     const sec = seconds % 60;
     return minutes > 0 ? `${minutes} хв ${sec} с` : `${sec} с`;
+}
+
+// Форматування фактичної тривалості
+function formatDuration(ms) {
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return minutes > 0 ? `${minutes} хв ${seconds} с` : `${seconds} с`;
 }
 
 // Функція форматування значень слайдерів
@@ -84,6 +96,7 @@ tts.onStatusChange = (message) => {
 // Основна функція генерації аудіо
 async function generateAudio() {
     console.log('🚀 Початок генерації аудіо...');
+    const startedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
     
     const text = textInput.value.trim();
     const voice = voicesSelect.value;
@@ -134,6 +147,9 @@ async function generateAudio() {
             
             tts.downloadAudio(audioBlob, filename);
             updateStatus(`Аудіо файл "${filename}" готовий!`, 'success');
+            const finishedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            const took = formatDuration(finishedAt - startedAt);
+            etaDiv.textContent = `Фактичний час: ${took}`;
             
         } else {
             // Кілька файлів - генерація по частинах
@@ -141,6 +157,13 @@ async function generateAudio() {
             updateStatus(`Генерую ${textChunks.length} частин...`, 'processing');
             
             const audioBlobs = [];
+            // Показати прогрес-бар
+            if (chunkProgress && chunkProgressBar && chunkProgressLabel) {
+                chunkProgress.style.display = 'block';
+                chunkProgressBar.style.width = '0%';
+                chunkProgressLabel.style.display = 'block';
+                chunkProgressLabel.textContent = `Частина 0/${textChunks.length}`;
+            }
             
             for (let i = 0; i < textChunks.length; i++) {
                 console.log(`📝 Генерація частини ${i + 1}/${textChunks.length}...`);
@@ -149,14 +172,25 @@ async function generateAudio() {
                 const doneChars = textChunks.slice(0, i).reduce((n, s) => n + s.length, 0);
                 const remaining = totalChars - doneChars;
                 etaDiv.textContent = `Орієнтовний час озвучки: ${estimateEta(remaining, textChunks.length - i)}`;
+                // Оновити прогрес-бар
+                if (chunkProgressBar && chunkProgressLabel) {
+                    chunkProgressLabel.textContent = `Частина ${i + 1}/${textChunks.length}`;
+                }
                 
                 try {
                     const audioBlob = await tts.generateAudio(textChunks[i], voice, pitch, rate);
                     audioBlobs.push(audioBlob);
                     console.log(`✅ Частина ${i + 1} згенерована, розмір:`, audioBlob.size, 'байт');
+                    if (chunkProgressBar) {
+                        const percentAfter = Math.round(((i + 1) / textChunks.length) * 100);
+                        chunkProgressBar.style.width = `${percentAfter}%`;
+                    }
                 } catch (error) {
                     console.error(`❌ Помилка генерації частини ${i + 1}:`, error);
                     updateStatus(`Помилка частини ${i + 1}: ${error.message}`, 'error');
+                    if (chunkProgress && chunkProgressLabel) {
+                        chunkProgressLabel.textContent = `Помилка на частині ${i + 1}/${textChunks.length}`;
+                    }
                     return;
                 }
             }
@@ -173,6 +207,13 @@ async function generateAudio() {
             
             tts.downloadAudio(combinedBlob, filename);
             updateStatus(`Об'єднаний аудіо файл "${filename}" готовий!`, 'success');
+            if (chunkProgressBar && chunkProgressLabel) {
+                chunkProgressBar.style.width = '100%';
+                chunkProgressLabel.textContent = `Готово: ${textChunks.length}/${textChunks.length}`;
+            }
+            const finishedAt = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+            const took = formatDuration(finishedAt - startedAt);
+            etaDiv.textContent = `Фактичний час: ${took}`;
         }
         
     } catch (error) {
@@ -189,6 +230,13 @@ async function generateAudio() {
         console.log('🔓 Кнопка розблокована');
         // Очистити ETA після завершення
         // Залишимо останню оцінку ще на екрані; можна очистити при потребі
+        // Сховати прогрес через коротку паузу
+        if (chunkProgress && chunkProgressLabel) {
+            setTimeout(() => {
+                chunkProgress.style.display = 'none';
+                chunkProgressLabel.style.display = 'none';
+            }, 1500);
+        }
     }
 }
 
