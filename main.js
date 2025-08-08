@@ -7,8 +7,15 @@ const pitchSlider = document.getElementById('pitch');
 const rateDisplay = document.getElementById('rate-display');
 const pitchDisplay = document.getElementById('pitch-display');
 const generateBtn = document.getElementById('generate-btn');
+const randomQuoteBtn = document.getElementById('random-quote');
+const clearTextBtn = document.getElementById('clear-text');
+const saveSettingsBtn = document.getElementById('save-settings');
+const clearSettingsBtn = document.getElementById('clear-settings');
+const etaDiv = document.getElementById('eta');
 const statusDiv = document.getElementById('status');
 const charCount = document.getElementById('char-count');
+// Блокування автозбереження після очищення налаштувань
+let skipSaveSettings = false;
 
 // Створення екземплярів
 const tts = new EdgeTTS();
@@ -19,6 +26,18 @@ function updateStatus(message, type = '') {
     statusDiv.textContent = message;
     statusDiv.className = `status ${type}`;
     console.log(`📱 UI Статус [${type}]: ${message}`);
+}
+
+// Оцінка часу (ETA)
+function estimateEta(charCount, partsCount = 1) {
+    // Евристика: ~35-60 символів/сек залежно від швидкості мережі і відповіді сервера
+    // Візьмемо середнє 45 симв/сек, плюс накладні 1.2 сек на частину
+    const charsPerSecond = 45;
+    const baseOverheadSec = 1.2;
+    const seconds = Math.ceil(charCount / charsPerSecond + partsCount * baseOverheadSec);
+    const minutes = Math.floor(seconds / 60);
+    const sec = seconds % 60;
+    return minutes > 0 ? `${minutes} хв ${sec} с` : `${sec} с`;
 }
 
 // Функція форматування значень слайдерів
@@ -98,6 +117,11 @@ async function generateAudio() {
         const stats = textProcessor.getStats();
         
         console.log('📊 Статистика обробки:', stats);
+
+        // Показати орієнтовний час
+        const totalChars = text.length;
+        const eta = estimateEta(totalChars, textChunks.length);
+        etaDiv.textContent = `Орієнтовний час озвучки: ${eta}`;
         
         if (textChunks.length === 1) {
             // Один файл - звичайна генерація
@@ -121,6 +145,10 @@ async function generateAudio() {
             for (let i = 0; i < textChunks.length; i++) {
                 console.log(`📝 Генерація частини ${i + 1}/${textChunks.length}...`);
                 updateStatus(`Генерую частину ${i + 1}/${textChunks.length}...`, 'processing');
+                // Оновлювати ETA по ходу
+                const doneChars = textChunks.slice(0, i).reduce((n, s) => n + s.length, 0);
+                const remaining = totalChars - doneChars;
+                etaDiv.textContent = `Орієнтовний час озвучки: ${estimateEta(remaining, textChunks.length - i)}`;
                 
                 try {
                     const audioBlob = await tts.generateAudio(textChunks[i], voice, pitch, rate);
@@ -159,6 +187,8 @@ async function generateAudio() {
         generateBtn.disabled = false;
         generateBtn.textContent = 'Згенерувати аудіо';
         console.log('🔓 Кнопка розблокована');
+        // Очистити ETA після завершення
+        // Залишимо останню оцінку ще на екрані; можна очистити при потребі
     }
 }
 
@@ -174,7 +204,11 @@ textInput.addEventListener('keydown', (e) => {
 });
 
 // Збереження налаштувань в localStorage
-function saveSettings() {
+function saveSettings(ignoreSkip = false) {
+    if (skipSaveSettings && !ignoreSkip) {
+        console.log('⏭️ Пропущено автозбереження (skipSaveSettings=true)');
+        return;
+    }
     const settings = {
         voice: voicesSelect.value,
         rate: rateSlider.value,
@@ -198,7 +232,18 @@ function loadSettings() {
         if (savedSettings) {
             const settings = JSON.parse(savedSettings);
             
-            if (settings.voice) voicesSelect.value = settings.voice;
+            if (settings.voice) {
+                // Якщо фільтр English застосовано — тимчасово знімемо, щоб опція існувала
+                let restoreFilter = false;
+                if (filterEnglishCheckbox && filterEnglishCheckbox.checked && !settings.voice.startsWith('en-')) {
+                    restoreFilter = true;
+                    applyEnglishFilter(false);
+                }
+                voicesSelect.value = settings.voice;
+                if (restoreFilter) {
+                    applyEnglishFilter(true);
+                }
+            }
             if (settings.rate !== undefined) {
                 rateSlider.value = settings.rate;
                 rateDisplay.textContent = formatSliderValue(settings.rate, '%');
@@ -222,13 +267,24 @@ function loadSettings() {
 voicesSelect.addEventListener('change', saveSettings);
 rateSlider.addEventListener('change', saveSettings);
 pitchSlider.addEventListener('change', saveSettings);
+// Зберігати і під час руху повзунків
+rateSlider.addEventListener('input', saveSettings);
+pitchSlider.addEventListener('input', saveSettings);
 textInput.addEventListener('input', debounce(saveSettings, 1000));
 
 // --- Сортування списку голосів за абеткою ---
 function sortVoicesOptions() {
     const currentValue = voicesSelect.value;
     const options = Array.from(voicesSelect.options);
-    options.sort((a, b) => a.text.localeCompare(b.text, undefined, { sensitivity: 'base' }));
+    options.sort((a, b) => {
+        const aIsRu = a.value.trim().toLowerCase().startsWith('ru-');
+        const bIsRu = b.value.trim().toLowerCase().startsWith('ru-');
+        // RU опції в кінець списку
+        if (aIsRu && !bIsRu) return 1;
+        if (!aIsRu && bIsRu) return -1;
+        // Інакше — алфавітно
+        return a.text.localeCompare(b.text, undefined, { sensitivity: 'base' });
+    });
     voicesSelect.innerHTML = '';
     for (const opt of options) voicesSelect.appendChild(opt);
     // Відновити попередній вибір, якщо є
@@ -239,38 +295,24 @@ function sortVoicesOptions() {
 // --- Фільтр лише English ---
 function applyEnglishFilter(checked) {
     const desiredPrefix = 'en-';
-    const previouslySelected = voicesSelect.value;
-
     for (const option of Array.from(voicesSelect.options)) {
         const isEnglish = option.value.trim().startsWith(desiredPrefix);
         option.hidden = checked ? !isEnglish : false;
     }
 
-    // Якщо поточно обраний голос приховано — обрати перший доступний
-    if (checked) {
+    // Якщо обраний голос не English або став прихованим — обрати перший видимий (перший English)
+    const selectedOption = voicesSelect.selectedOptions[0];
+    const isSelectedVisible = selectedOption && !selectedOption.hidden;
+    const isSelectedEnglish = voicesSelect.value.trim().startsWith(desiredPrefix);
+    if (checked && (!isSelectedVisible || !isSelectedEnglish)) {
         const firstVisible = Array.from(voicesSelect.options).find(o => !o.hidden);
-        if (firstVisible) {
-            voicesSelect.value = firstVisible.value;
-        }
-    } else {
-        // Повернути попередній вибір, якщо існує
-        const hasPrev = Array.from(voicesSelect.options).some(o => o.value === previouslySelected);
-        if (hasPrev) voicesSelect.value = previouslySelected;
+        if (firstVisible) voicesSelect.value = firstVisible.value;
     }
 
     saveSettings();
 }
 
 if (filterEnglishCheckbox) {
-    // Застосувати фільтр після завантаження налаштувань
-    document.addEventListener('DOMContentLoaded', () => {
-        // Спочатку відсортувати список
-        sortVoicesOptions();
-        // Автоматично активувати фільтр English при старті
-        filterEnglishCheckbox.checked = true;
-        applyEnglishFilter(true);
-    });
-
     filterEnglishCheckbox.addEventListener('change', (e) => {
         applyEnglishFilter(e.target.checked);
     });
@@ -367,6 +409,15 @@ async function combineAudioBlobs(audioBlobs) {
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     updateCharCount(); // Ініціалізація лічильника символів
+    // Сортування списку голосів після завантаження налаштувань
+    sortVoicesOptions();
+    // За замовчуванням вмикаємо фільтр English, якщо налаштування ще не збережені
+    if (filterEnglishCheckbox) {
+        if (localStorage.getItem('edgeTTSSettings') === null) {
+            filterEnglishCheckbox.checked = true;
+        }
+        applyEnglishFilter(filterEnglishCheckbox.checked);
+    }
     updateStatus('Готовий до роботи. Введіть текст та натисніть "Згенерувати аудіо"');
     
     // Примусове оновлення при F5 або Ctrl+R
@@ -380,6 +431,81 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Очищення ресурсів при закритті сторінки
 window.addEventListener('beforeunload', () => {
-    saveSettings();
+    if (!skipSaveSettings) {
+        saveSettings();
+    } else {
+        console.log('⏭️ Пропущено збереження перед виходом (skipSaveSettings=true)');
+    }
     tts.disconnect();
 });
+
+// --- Випадкова цитата ---
+const QUOTES = [
+    'Слова — це, звісно, наймогутніша зброя людства. — Кіплінг',
+    'Вперед і вгору — ось наш шлях. — Г. Сковорода',
+    'Дорогу осилит идущий. — Сенека',
+    'The only limit to our realization of tomorrow is our doubts of today. — F. D. Roosevelt',
+    'Simplicity is the soul of efficiency. — Austin Freeman',
+    'Talk is cheap. Show me the code. — Linus Torvalds',
+    'Stay hungry. Stay foolish. — Steve Jobs',
+    'Make it work, make it right, make it fast. — Kent Beck'
+];
+
+function insertRandomQuote() {
+    const quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+    // Якщо в textarea вже є текст — додамо з нового рядка
+    textInput.value = textInput.value ? (textInput.value.trimEnd() + '\n' + quote) : quote;
+    updateCharCount();
+    saveSettings();
+}
+
+if (randomQuoteBtn) {
+    randomQuoteBtn.addEventListener('click', insertRandomQuote);
+}
+
+function clearText() {
+    textInput.value = '';
+    updateCharCount();
+    if (etaDiv) etaDiv.textContent = '';
+    saveSettings();
+}
+
+if (clearTextBtn) {
+    clearTextBtn.addEventListener('click', clearText);
+}
+
+function clearAllSettings() {
+    try {
+        localStorage.removeItem('edgeTTSSettings');
+        skipSaveSettings = true;
+        updateStatus('Налаштування очищено', 'success');
+        // Скинути UI
+        rateSlider.value = '0';
+        pitchSlider.value = '0';
+        rateDisplay.textContent = formatSliderValue(rateSlider.value, '%');
+        pitchDisplay.textContent = formatSliderValue(pitchSlider.value, 'Hz');
+        // Пересортувати голоси (RU в кінець) і перевстановити фільтр English
+        sortVoicesOptions();
+        if (filterEnglishCheckbox) {
+            // Залишити стан галочки як є, але застосувати фільтр до списку
+            applyEnglishFilter(filterEnglishCheckbox.checked);
+        }
+    } catch (e) {
+        console.error('Не вдалося очистити налаштування', e);
+        updateStatus('Помилка очищення налаштувань', 'error');
+    }
+}
+
+if (saveSettingsBtn) {
+    saveSettingsBtn.addEventListener('click', () => {
+        // Дозволяємо зберегти вручну навіть якщо був режим skip
+        saveSettings(true);
+        // Після явного збереження надалі можна знову автозберігати
+        skipSaveSettings = false;
+        updateStatus('Налаштування збережено', 'success');
+    });
+}
+
+if (clearSettingsBtn) {
+    clearSettingsBtn.addEventListener('click', clearAllSettings);
+}

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Edge TTS - Генератор аудіо</title>
-    <link rel="stylesheet" href="style.css?v=1754593025456">
+    <link rel="stylesheet" href="style.css?v=1754637288181">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
@@ -19,6 +19,9 @@
                 <textarea id="text-input" placeholder="Введіть текст для озвучування..."></textarea>
                 <div class="char-counter">
                     <span id="char-count">0</span> символів
+                </div>
+                <div class="control-group">
+                    <button id="clear-text" type="button" class="secondary-button">Очистити текст</button>
                 </div>
             </div>
             
@@ -353,6 +356,15 @@
                         <label for="filter-english" style="user-select:none; cursor:pointer;">Показати лише English</label>
                     </div>
                 </div>
+
+                <div class="control-group">
+                    <button id="random-quote" type="button" class="secondary-button">Вставити випадкову цитату</button>
+                </div>
+
+                <div class="control-group button-row">
+                    <button id="save-settings" type="button" class="tiny-button">Зберегти налаштування</button>
+                    <button id="clear-settings" type="button" class="tiny-button">Очистити налаштування</button>
+                </div>
                 
                 <div class="control-group">
                     <label for="rate">Швидкість: <span id="rate-display">+0%</span></label>
@@ -367,12 +379,13 @@
                 <button id="generate-btn" class="generate-button">Згенерувати аудіо</button>
                 
                 <div id="status" class="status"></div>
+                <div id="eta" class="eta"></div>
             </div>
         </div>
     </div>
     
     <script src="text-processor.js?v=1754591729366"></script>
-    <script src="edge-tts.js?v=1754593025456"></script>
-    <script src="main.js?v=1754593025456"></script>
+    <script src="edge-tts.js?v=1754637288181"></script>
+    <script src="main.js?v=1754637288181"></script>
 </body>
 </html>
